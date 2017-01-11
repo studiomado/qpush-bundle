@@ -61,7 +61,8 @@ class Configuration implements ConfigurationInterface
             'ironmq' => ['token', 'project_id'],
             'sync' => [],
             'custom' => ['service'],
-            'file' => ['path']
+            'file' => ['path'],
+            'beanstalkd' => []
         ];
 
         $node
@@ -98,6 +99,19 @@ class Configuration implements ConfigurationInterface
                     ->end()
                     // File
                     ->scalarNode('path')->end()
+                    // Beanstalkd
+                    ->scalarNode('host')
+                        ->defaultValue('127.0.0.1')
+                    ->end()
+                    ->scalarNode('port')
+                        ->defaultValue('11300')
+                    ->end()
+                    ->scalarNode('timeout')
+                        ->defaultValue('null')
+                    ->end()
+                    ->scalarNode('persistent')
+                        ->defaultValue('false')
+                    ->end()
                 ->end()
 
                 ->validate()

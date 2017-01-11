@@ -88,6 +88,14 @@ class UecodeQPushExtension extends Extension
                     $class = $container->getParameter('uecode_qpush.provider.file');
                     $values['options']['path'] = $config['providers'][$provider]['path'];
                     break;
+                case 'beanstalkd':
+                    $class  = $container->getParameter('uecode_qpush.provider.beanstalkd');
+                    $client = $this->createBeanstalkdClient(
+                        $config['providers'][$provider],
+                        $container,
+                        $provider
+                    );
+                    break;
             }
 
             $definition = new Definition(
@@ -226,6 +234,44 @@ class UecodeQPushExtension extends Extension
             ]);
 
             $container->setDefinition($service, $ironmq)
+                ->setPublic(false);
+        }
+
+        return new Reference($service);
+    }
+
+    /**
+     * Creates a definition for the Beanstalkd provider
+     *
+     * @param array            $config    A Configuration array for the provider
+     * @param ContainerBuilder $container The container
+     * @param string           $name      The provider key
+     *
+     * @return Reference
+     */
+    private function createBeanstalkdClient($config, ContainerBuilder $container, $name)
+    {
+        $service = sprintf('uecode_qpush.provider.%s', $name);
+
+        if (!$container->hasDefinition($service)) {
+
+            if (!class_exists('Pheanstalk\Pheanstalk')) {
+                throw new \RuntimeException(
+                    'You must require "pda/pheanstalk" to use the Beanstalkd provider.'
+                );
+            }
+
+            $pheanstalk = new Definition('Pheanstalk\Pheanstalk');
+            $pheanstalk->setArguments([
+                [
+                    'host'              => $config['host'],
+                    'port'              => $config['port'],
+                    'connectTimeout'    => $config['timeout'],
+                    'connectPersistent' => $config['persistent'],
+                ]
+            ]);
+
+            $container->setDefinition($service, $pheanstalk)
                 ->setPublic(false);
         }
 

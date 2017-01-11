@@ -80,5 +80,6 @@ class UecodeQPushExtensionTest extends \PHPUnit_Framework_TestCase
             $this->container->get('uecode_qpush.test_ironmq'),
             $this->container->get('uecode_qpush.test_secondary_ironmq')
         );
+        $this->assertTrue($this->container->has('uecode_qpush.test_beanstalkd'));
     }
 }

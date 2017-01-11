@@ -23,6 +23,12 @@ uecode_qpush:
         file:
             driver: file
             path: /tmp/my_queue
+        beanstalkd:
+            driver: beanstalkd
+            host: 123
+            port: 123
+            timeout: 123
+            persistent: false
     queues:
         test_file:
             provider: file
@@ -80,6 +86,14 @@ uecode_qpush:
                 receive_wait_time:      3
                 subscribers:
                     - { endpoint: http://example.com/qpush, protocol: http }
+        test_beanstalkd:
+            provider: beanstalkd
+            options:
+                message_delay:          0
+                message_timeout:        30
+                message_expiration:     604800
+                messages_to_receive:    1
+                receive_wait_time:      3
 
 services:
     event_dispatcher:

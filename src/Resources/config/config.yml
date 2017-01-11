@@ -11,6 +11,11 @@ uecode_qpush:
             token:
             project_id:
             host:
+        beanstalkd:
+            host:
+            port:
+            timeout:
+            persistent:
     queues:
         default:
             provider: aws #or ironmq
