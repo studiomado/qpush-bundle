@@ -8,11 +8,15 @@ use Symfony\Component\Finder\Finder;
 use Symfony\Component\Finder\SplFileInfo;
 use Uecode\Bundle\QPushBundle\Event\MessageEvent;
 use Uecode\Bundle\QPushBundle\Message\Message;
+use Pheanstalk\Pheanstalk;
 
 class BeanstalkdProvider extends AbstractProvider
 {
     protected $filePointerList = [];
     protected $queuePath;
+    /**
+     * @var Pheanstalk
+     */
     protected $pheanstalk;
 
     public function __construct($name, array $options, $client, Cache $cache, Logger $logger) {
@@ -37,11 +41,20 @@ class BeanstalkdProvider extends AbstractProvider
 
     public function publish(array $message, array $options = [])
     {
-        $this->pheanstalk
-            ->useTube('testtube')
-            ->put("job payload goes here\n");
+        $options = $this->mergeOptions($options);
+        $publishStart = microtime(true);
 
-        return $fileName;
+        $id = $this->pheanstalk
+            ->useTube($this->getNameWithPrefix())
+            ->put(json_encode($message));
+
+        $context = [
+            'message_id'    => $id,
+            'publish_time'  => microtime(true) - $publishStart
+        ];
+        $this->log(200, "Message has been published.", $context);
+
+        return $id;
     }
 
     /**
@@ -50,90 +63,41 @@ class BeanstalkdProvider extends AbstractProvider
      */
     public function receive(array $options = [])
     {
-        $finder = new Finder();
-        $finder
-            ->files()
-            ->ignoreDotFiles(true)
-            ->ignoreUnreadableDirs(true)
-            ->ignoreVCS(true)
-            ->name('*.json')
-            ->in($this->queuePath)
-        ;
-        if ($this->options['message_delay'] > 0) {
-            $finder->date(
-                sprintf('< %d seconds ago', $this->options['message_delay'])
-            );
-        }
-        $finder
-            ->date(
-                sprintf('> %d seconds ago', $this->options['message_expiration'])
-            )
-        ;
-        $messages = [];
-        /** @var SplFileInfo $file */
-        foreach ($finder as $file) {
-            $filePointer = fopen($file->getRealPath(), 'r+');
-            $id = substr($file->getFilename(), 0, -5);
-            if (!isset($this->filePointerList[$id]) && flock($filePointer, LOCK_EX | LOCK_NB)) {
-                $this->filePointerList[$id] = $filePointer;
-                $messages[] = new Message($id, json_decode($file->getContents(), true), []);
-            } else {
-                fclose($filePointer);
-            }
-            if (count($messages) === (int) $this->options['messages_to_receive']) {
-                break;
-            }
-        }
+        $options = $this->mergeOptions($options);
+
+        $job = $this->pheanstalk->
+            ->watch($this->getNameWithPrefix())
+            ->ignore('default')
+            ->reserve();
+
+        echo $job->getData();
+
+        $pheanstalk->delete($job);
         return $messages;
     }
 
     public function delete($id)
     {
-        $success = false;
-        if (isset($this->filePointerList[$id])) {
-            $fileName = $id;
-            $path = substr(hash('md5', (string)$fileName), 0, 3);
-            $fs = new Filesystem();
-            $fs->remove(
-                $this->queuePath . DIRECTORY_SEPARATOR . $path . DIRECTORY_SEPARATOR . $fileName . '.json'
-            );
-            fclose($this->filePointerList[$id]);
-            unset($this->filePointerList[$id]);
-            $success = true;
-        }
-        if (rand(1,10) === 5) {
-            $this->cleanUp();
-        }
-        return $success;
+        $job = $this->pheanstalk->peek($id);
+
+        $this->pheanstalk->delete($job);
+
+        $context = [
+            'message_id'    => $id
+        ];
+        $this->log(200,"Message deleted from Beanstalkd", $context);
+
+        return true;
     }
 
     public function cleanUp()
     {
-        $finder = new Finder();
-        $finder
-            ->files()
-            ->in($this->queuePath)
-            ->ignoreDotFiles(true)
-            ->ignoreUnreadableDirs(true)
-            ->ignoreVCS(true)
-            ->depth('< 2')
-            ->name('*.json')
-        ;
-        $finder->date(
-            sprintf('< %d seconds ago', $this->options['message_expiration'])
-        );
-        /** @var SplFileInfo $file */
-        foreach ($finder as $file) {
-            @unlink($file->getRealPath());
-        }
+
     }
 
     public function destroy()
     {
-        $fs = new Filesystem();
-        $fs->remove($this->queuePath);
-        $this->filePointerList = [];
-        return !is_dir($this->queuePath);
+        return true;
     }
 
     /**
