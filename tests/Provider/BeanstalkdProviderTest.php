@@ -40,7 +40,7 @@ class BeanstalkdProviderTest extends \PHPUnit_Framework_TestCase
     /**
      * Mock Client
      *
-     * @var \stdClass
+     * @var BeanstalkdProvider
      */
     protected $provider;
 
@@ -107,45 +107,17 @@ class BeanstalkdProviderTest extends \PHPUnit_Framework_TestCase
 
     public function testCreate()
     {
-        $this->assertFalse($this->provider->queueExists());
-
-        $this->assertTrue($this->provider->queueExists());
-
         $this->assertTrue($this->provider->create());
-        $this->assertTrue($this->provider->queueExists());
-
-        $provider = $this->getIronMqProvider([
-            'subscribers' => [
-                [ 'protocol' => 'email', 'endpoint' => 'test@foo.com' ]
-            ]
-        ]);
-
-        $this->setExpectedException('InvalidArgumentException');
-        $provider->create();
     }
 
     public function testDestroy()
     {
-        // First call returns true when the queue exists
         $this->assertTrue($this->provider->destroy());
-
-        // Second call catches exception and returns true when the queue
-        // does not exists
-        $this->assertTrue($this->provider->destroy());
-
-        // Last call throws an exception if there is an exception outside
-        // of a HTTP 404
-        $this->setExpectedException('Exception');
-        $this->provider->destroy();
     }
 
     public function testPublish()
     {
-        $provider = $this->getIronMqProvider([
-            'push_notifications'    => false
-        ]);
-
-        $this->assertEquals(123, $provider->publish(['foo' => 'bar']));
+        $this->assertEquals(123, $this->provider->publish(['foo' => 'bar']));
     }
 
     public function testReceive()
@@ -170,37 +142,11 @@ class BeanstalkdProviderTest extends \PHPUnit_Framework_TestCase
         $this->provider->delete(789);
     }
 
-    public function testOnNotification()
-    {
-        $event = new NotificationEvent(
-            'test',
-            NotificationEvent::TYPE_MESSAGE,
-            new Notification(123, "test", [])
-        );
-
-        $this->provider->onNotification(
-            $event,
-            NotificationEvent::TYPE_MESSAGE,
-            $this->getMock('Symfony\Component\EventDispatcher\EventDispatcherInterface')
-        );
-    }
-
     public function testOnMessageReceived()
     {
         $this->provider->onMessageReceived(new MessageEvent(
             'test',
             new Message(123, ['foo' => 'bar'], [])
         ));
-    }
-
-    public function testQueueInfo()
-    {
-        $this->assertNull($this->provider->queueInfo());
-
-        $this->provider->create();
-        $queue = $this->provider->queueInfo();
-        $this->assertEquals('530295fe3c94fbcf0c79cffe', $queue->id);
-        $this->assertEquals('test', $queue->name);
-        $this->assertEquals('52f67d032001c00005000057', $queue->project_id);
     }
 }

@@ -3,17 +3,12 @@ namespace Uecode\Bundle\QPushBundle\Provider;
 
 use Doctrine\Common\Cache\Cache;
 use Monolog\Logger;
-use Symfony\Component\Filesystem\Filesystem;
-use Symfony\Component\Finder\Finder;
-use Symfony\Component\Finder\SplFileInfo;
 use Uecode\Bundle\QPushBundle\Event\MessageEvent;
 use Uecode\Bundle\QPushBundle\Message\Message;
 use Pheanstalk\Pheanstalk;
 
 class BeanstalkdProvider extends AbstractProvider
 {
-    protected $filePointerList = [];
-    protected $queuePath;
     /**
      * @var Pheanstalk
      */
@@ -21,8 +16,6 @@ class BeanstalkdProvider extends AbstractProvider
 
     public function __construct($name, array $options, $client, Cache $cache, Logger $logger) {
         $this->name     = $name;
-        /* md5 only contain numeric and A to F, so it is file system safe */
-        $this->queuePath = $options['path'].DIRECTORY_SEPARATOR.str_replace('-', '', hash('md5', $name));
         $this->options  = $options;
         $this->cache    = $cache;
         $this->logger   = $logger;
@@ -41,7 +34,6 @@ class BeanstalkdProvider extends AbstractProvider
 
     public function publish(array $message, array $options = [])
     {
-        $options = $this->mergeOptions($options);
         $publishStart = microtime(true);
 
         $id = $this->pheanstalk
@@ -63,16 +55,17 @@ class BeanstalkdProvider extends AbstractProvider
      */
     public function receive(array $options = [])
     {
-        $options = $this->mergeOptions($options);
-
-        $job = $this->pheanstalk->
+        $job = $this->pheanstalk
             ->watch($this->getNameWithPrefix())
             ->ignore('default')
             ->reserve();
 
-        echo $job->getData();
+        $message = new Message($job->getId(), $job->getData(), []);
+        $this->log(200, "Message has been received.", ['message_id' => $job->getId()]);
 
-        $pheanstalk->delete($job);
+        $messages = [];
+        $messages[] = $message;
+
         return $messages;
     }
 
@@ -88,11 +81,6 @@ class BeanstalkdProvider extends AbstractProvider
         $this->log(200,"Message deleted from Beanstalkd", $context);
 
         return true;
-    }
-
-    public function cleanUp()
-    {
-
     }
 
     public function destroy()
